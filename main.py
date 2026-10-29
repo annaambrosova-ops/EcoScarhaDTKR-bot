@@ -3,7 +3,8 @@ import csv
 import io
 import logging
 import os
-import aiohttp  # 👈 Обов'язково додайте цей імпорт!
+import aiohttp
+from aiohttp import web  
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
