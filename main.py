@@ -137,16 +137,88 @@ async def appeals_handler(message: types.Message):
     await message.answer(text, reply_markup=kb, parse_mode="Markdown")
 
 
+import csv
+import io
+
+# 🔗 Ваше опубліковане посилання на CSV з Google Sheets
+GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQX4VVekM7ZCLhwk1HRuUXPVCK0L5uQgmulQd60j3skRWuZe43cICCCJy-nw8uRREW4X-IecsWZ2APN/pub?gid=0&single=true&output=csv"
+
+
 @dp.message(F.text == "📢 Дайджест ОВД та СЕО")
 async def digest_handler(message: types.Message):
     users_db.add(message.from_user.id)
-    text = (
-        "📢 **Дайджест процедур ОВД та СЕО**\n\n"
-        "Тут публікуються актуальні екологічні справи Криворізького регіону з Реєстру ОВД/СЕО "
-        "та дедлайни для подання зауважень громадськості.\n\n"
-        "📌 *Розділ оновлюється щотижня.*"
-    )
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer("🔄 Завантажую актуальний дайджест...")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(GOOGLE_SHEET_CSV_URL) as response:
+                if response.status != 200:
+                    await message.answer(
+                        "⚠️ Не вдалося завантажити дайджест. Спробуйте пізніше."
+                    )
+                    return
+
+                content = await response.text()
+
+        # Читаємо CSV-дані
+        f = io.StringIO(content)
+        reader = csv.DictReader(f)
+
+        text_lines = ["📢 **Дайджест процедур ОВД та СЕО**\n"]
+        has_cases = False
+
+        for row in reader:
+            tp = row.get("Тип дозвільної процедури", "").strip()
+            company = row.get("Підприємство/Замовник", "").strip()
+            case_num = row.get("Номер справи", "").strip()
+            desc = row.get("Короткий опис діяльності", "").strip()
+            stage = row.get("Стадія", "").strip()
+            deadline = row.get("Дедлайн для подання зауважень", "").strip()
+            hearings = row.get("Дата та час слухань", "").strip()
+            link = row.get("Посилання на справу в Реєстрі", "").strip()
+
+            if not company and not case_num:
+                continue
+
+            has_cases = True
+            header = f"🔹 **[{tp}] {company}**"
+            if case_num:
+                header += f" (Справа №`{case_num}`)"
+
+            text_lines.append(header)
+            if desc:
+                text_lines.append(f"• **Діяльність:** {desc}")
+            if stage:
+                text_lines.append(f"• **Стадія:** {stage}")
+            if hearings:
+                text_lines.append(f"• **Слухання:** {hearings}")
+            if deadline:
+                text_lines.append(f"• **Дедлайн зауважень:** {deadline}")
+            if link and link.startswith("http"):
+                text_lines.append(f"🌐 [Переглянути у Реєстрі]({link})")
+
+            text_lines.append("")  # Порожній рядок-розділювач
+
+        if not has_cases:
+            await message.answer(
+                "📢 **Дайджест ОВД та СЕО**\n\nНаразі немає активних справ у реєстрі."
+            )
+            return
+
+        text_lines.append(
+            "📌 *Для завантаження шаблонів зауважень скористайтеся розділом «📋 Подати скаргу / звернення».*"
+        )
+        final_text = "\n".join(text_lines)
+
+        await message.answer(
+            final_text, parse_mode="Markdown", disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        logging.error(f"Помилка завантаження дайджесту: {e}")
+        await message.answer(
+            "⚠️ Виникла помилка під час оновлення дайджесту. Перевірте доступ до Google Таблиці."
+        )
 
 
 @dp.message(F.text == "📞 Довідник інстанцій")
