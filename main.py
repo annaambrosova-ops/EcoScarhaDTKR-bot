@@ -1,7 +1,9 @@
 import asyncio
+import csv
+import io
 import logging
 import os
-from aiohttp import web
+import aiohttp  # 👈 Обов'язково додайте цей імпорт!
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
