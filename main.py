@@ -140,27 +140,25 @@ async def appeals_handler(message: types.Message):
 import csv
 import io
 
-# 🔗 Ваше опубліковане посилання на CSV з Google Sheets
+# 🔗 Вставте сюди скопійоване CSV-посилання з пунктів вище
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQX4VVekM7ZCLhwk1HRuUXPVCK0L5uQgmulQd60j3skRWuZe43cICCCJy-nw8uRREW4X-IecsWZ2APN/pub?gid=0&single=true&output=csv"
 
 
 @dp.message(F.text == "📢 Дайджест ОВД та СЕО")
 async def digest_handler(message: types.Message):
     users_db.add(message.from_user.id)
-    await message.answer("🔄 Завантажую актуальний дайджест...")
+    msg = await message.answer("🔄 Завантажую актуальний дайджест...")
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(GOOGLE_SHEET_CSV_URL) as response:
                 if response.status != 200:
-                    await message.answer(
-                        "⚠️ Не вдалося завантажити дайджест. Спробуйте пізніше."
+                    await msg.edit_text(
+                        "⚠️ Не вдалося завантажити Google Таблицю (помилка доступу)."
                     )
                     return
-
                 content = await response.text()
 
-        # Читаємо CSV-дані
         f = io.StringIO(content)
         reader = csv.DictReader(f)
 
@@ -197,10 +195,10 @@ async def digest_handler(message: types.Message):
             if link and link.startswith("http"):
                 text_lines.append(f"🌐 [Переглянути у Реєстрі]({link})")
 
-            text_lines.append("")  # Порожній рядок-розділювач
+            text_lines.append("")
 
         if not has_cases:
-            await message.answer(
+            await msg.edit_text(
                 "📢 **Дайджест ОВД та СЕО**\n\nНаразі немає активних справ у реєстрі."
             )
             return
@@ -210,14 +208,19 @@ async def digest_handler(message: types.Message):
         )
         final_text = "\n".join(text_lines)
 
-        await message.answer(
-            final_text, parse_mode="Markdown", disable_web_page_preview=True
-        )
+        # Спочатку пробуємо відправити з форматуванням Markdown
+        try:
+            await msg.edit_text(
+                final_text, parse_mode="Markdown", disable_web_page_preview=True
+            )
+        except Exception:
+            # Якщо у тексті були спеціальні символи, відправляємо як звичайний текст
+            await msg.edit_text(final_text, disable_web_page_preview=True)
 
     except Exception as e:
-        logging.error(f"Помилка завантаження дайджесту: {e}")
-        await message.answer(
-            "⚠️ Виникла помилка під час оновлення дайджесту. Перевірте доступ до Google Таблиці."
+        logging.error(f"Помилка дайджесту: {e}")
+        await msg.edit_text(
+            "⚠️ Виникла помилка під час оновлення дайджесту. Перевірте посилання на CSV у коді."
         )
 
 
