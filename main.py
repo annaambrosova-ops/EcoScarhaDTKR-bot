@@ -25,6 +25,11 @@ ADMIN_ID = 1218438551
 # 🔗 Публічне CSV-посилання на Google Таблицю Дайджесту
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQX4VVekM7ZCLhwk1HRuUXPVCK0L5uQgmulQd60j3skRWuZe43cICCCJy-nw8uRREW4X-IecsWZ2APN/pub?gid=0&single=true&output=csv"
 
+# 📝 Google Form URL для фонової фіксації унікальних користувачів
+FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfYWUz4EUQ5MaidbSJ5Ia68htaKmLuM0wgsC1untD5AWSrtmA/formResponse"
+ENTRY_USER_ID = "entry.1958461916"
+ENTRY_USER_NAME = "entry.419983157"
+
 # 📌 Опис бота (для /start та кнопки "ℹ️ Про бота")
 ABOUT_TEXT = (
     "🤖 **Ласкаво просимо до бота «ЕкоСкарга ДТКР»!**\n\n"
@@ -38,12 +43,32 @@ ABOUT_TEXT = (
     "💡 Обирайте потрібний розділ у меню нижче, щоб розпочати роботу!"
 )
 
-# База користувачів у пам'яті
+# База користувачів у оперативній пам'яті (для швидкої розсилки в сесії)
 users_db = set()
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+
+# ==========================================
+# 📊 ФОНОВА РЕЄСТРАЦІЯ В GOOGLE ФОРМУ
+# ==========================================
+
+
+async def log_user_to_google_form(user: types.User):
+    """Фоново відправляє ID та username користувача у Google Form."""
+    users_db.add(user.id)
+
+    user_name = user.username or f"{user.first_name} {user.last_name or ''}".strip()
+    data = {ENTRY_USER_ID: str(user.id), ENTRY_USER_NAME: user_name}
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(FORM_RESPONSE_URL, data=data) as resp:
+                pass  # Данні успішно відправлено
+    except Exception as e:
+        logging.error(f"Помилка фонового запису в Google Form: {e}")
 
 
 # ==========================================
@@ -99,7 +124,7 @@ async def start_web_server():
 # /start
 @dp.message(CommandStart())
 async def start_handler(message: types.Message):
-    users_db.add(message.from_user.id)
+    asyncio.create_task(log_user_to_google_form(message.from_user))
     await message.answer(
         ABOUT_TEXT, reply_markup=main_keyboard, parse_mode="Markdown"
     )
@@ -108,7 +133,7 @@ async def start_handler(message: types.Message):
 # ℹ️ Про бота
 @dp.message(F.text == "ℹ️ Про бота")
 async def about_handler(message: types.Message):
-    users_db.add(message.from_user.id)
+    asyncio.create_task(log_user_to_google_form(message.from_user))
     await message.answer(
         ABOUT_TEXT, reply_markup=main_keyboard, parse_mode="Markdown"
     )
@@ -119,7 +144,9 @@ async def about_handler(message: types.Message):
 async def stats_handler(message: types.Message):
     if message.from_user.id == ADMIN_ID:
         await message.answer(
-            f"📊 **Статистика бота:**\n\nВсього користувачів у базі: **{len(users_db)}**",
+            f"📊 **Поточна статистика сесії:**\n\n"
+            f"Активних користувачів після останнього деплою: **{len(users_db)}**\n\n"
+            f"💡 *Повну та незмінну базу унікальних користувачів за весь час дивіться у вашій Google Таблиці (аркуш «Відповіді на форму 1»).*",
             parse_mode="Markdown",
         )
     else:
@@ -145,7 +172,9 @@ async def broadcast_handler(message: types.Message):
         return
 
     if not users_db:
-        await message.answer("⚠️ База користувачів поки порожня.")
+        await message.answer(
+            "⚠️ База активної сесії порожня. Користувачі додаються при взаємодії з ботом."
+        )
         return
 
     status_msg = await message.answer(
@@ -169,7 +198,7 @@ async def broadcast_handler(message: types.Message):
     await status_msg.edit_text(
         f"✅ **Розсилку завершено!**\n\n"
         f"Успішно доставлено: **{successful}**\n"
-        f"Не доставлено (заблокували бота): **{failed}**",
+        f"Не доставлено: **{failed}**",
         parse_mode="Markdown",
     )
 
@@ -177,7 +206,7 @@ async def broadcast_handler(message: types.Message):
 # 📢 Дайджест дозвільних процедур
 @dp.message(F.text == "📢 Дайджест дозвільних процедур")
 async def digest_handler(message: types.Message):
-    users_db.add(message.from_user.id)
+    asyncio.create_task(log_user_to_google_form(message.from_user))
     msg = await message.answer("🔄 Завантажую актуальний дайджест...")
 
     try:
@@ -263,7 +292,7 @@ async def digest_handler(message: types.Message):
 # ℹ️ Контакти ГС «ДТКР»
 @dp.message(F.text == "ℹ️ Контакти ГС «ДТКР»")
 async def contacts_handler(message: types.Message):
-    users_db.add(message.from_user.id)
+    asyncio.create_task(log_user_to_google_form(message.from_user))
 
     text = (
         "🌿 **Громадська спілка «Досить труїти Кривий Ріг» (ГС ДТКР)**\n\n"
@@ -306,7 +335,7 @@ async def contacts_handler(message: types.Message):
 # Заглушки для майбутнього наповнення
 @dp.message(F.text == "📋 Подати скаргу / звернення")
 async def complaints_handler(message: types.Message):
-    users_db.add(message.from_user.id)
+    asyncio.create_task(log_user_to_google_form(message.from_user))
     await message.answer(
         "📋 Розділ **«Подати скаргу / звернення»** наразі наповнюється матеріалами."
     )
@@ -314,7 +343,7 @@ async def complaints_handler(message: types.Message):
 
 @dp.message(F.text == "📞 Довідник інстанцій")
 async def directory_handler(message: types.Message):
-    users_db.add(message.from_user.id)
+    asyncio.create_task(log_user_to_google_form(message.from_user))
     await message.answer(
         "📞 Розділ **«Довідник інстанцій»** наразі наповнюється контактами."
     )
@@ -322,7 +351,7 @@ async def directory_handler(message: types.Message):
 
 @dp.message(F.text == "📚 База знань")
 async def kb_handler(message: types.Message):
-    users_db.add(message.from_user.id)
+    asyncio.create_task(log_user_to_google_form(message.from_user))
     await message.answer(
         "📚 Розділ **«База знань»** наразі наповнюється статтями."
     )
@@ -330,7 +359,7 @@ async def kb_handler(message: types.Message):
 
 @dp.message(F.text == "🎓 Школа зеленої демократії")
 async def school_handler(message: types.Message):
-    users_db.add(message.from_user.id)
+    asyncio.create_task(log_user_to_google_form(message.from_user))
     await message.answer(
         "🎓 Розділ **«Школа зеленої демократії»** готує анонси нових тренінгів."
     )
