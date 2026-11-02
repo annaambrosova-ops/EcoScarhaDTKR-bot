@@ -25,10 +25,11 @@ ADMIN_ID = 1218438551
 # 🔗 Публічне CSV-посилання на Google Таблицю Дайджесту
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQX4VVekM7ZCLhwk1HRuUXPVCK0L5uQgmulQd60j3skRWuZe43cICCCJy-nw8uRREW4X-IecsWZ2APN/pub?gid=0&single=true&output=csv"
 
-# 📝 Google Form URL для фонової фіксації унікальних користувачів
+# 📝 Google Form URL для фонової фіксації метрик
 FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfYWUz4EUQ5MaidbSJ5Ia68htaKmLuM0wgsC1untD5AWSrtmA/formResponse"
 ENTRY_USER_ID = "entry.1958461916"
 ENTRY_USER_NAME = "entry.419983157"
+ENTRY_BUTTON_NAME = "entry.1993283542"
 
 # 📌 Опис бота (для /start та кнопки "ℹ️ Про бота")
 ABOUT_TEXT = (
@@ -43,7 +44,7 @@ ABOUT_TEXT = (
     "💡 Обирайте потрібний розділ у меню нижче, щоб розпочати роботу!"
 )
 
-# База користувачів у оперативній пам'яті (для швидкої розсилки в сесії)
+# База користувачів у оперативній пам'яті (для миттєвої розсилки)
 users_db = set()
 
 logging.basicConfig(level=logging.INFO)
@@ -52,21 +53,25 @@ dp = Dispatcher()
 
 
 # ==========================================
-# 📊 ФОНОВА РЕЄСТРАЦІЯ В GOOGLE ФОРМУ
+# 📊 ФОНОВА РЕЄСТРАЦІЯ ТА МЕТРИКИ В GOOGLE FORM
 # ==========================================
 
 
-async def log_user_to_google_form(user: types.User):
-    """Фоново відправляє ID та username користувача у Google Form."""
+async def log_user_to_google_form(user: types.User, button_name: str = "/start"):
+    """Фоново відправляє ID, username та назву натиснутої кнопки у Google Form."""
     users_db.add(user.id)
 
     user_name = user.username or f"{user.first_name} {user.last_name or ''}".strip()
-    data = {ENTRY_USER_ID: str(user.id), ENTRY_USER_NAME: user_name}
+    data = {
+        ENTRY_USER_ID: str(user.id),
+        ENTRY_USER_NAME: user_name,
+        ENTRY_BUTTON_NAME: button_name,
+    }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(FORM_RESPONSE_URL, data=data) as resp:
-                pass  # Данні успішно відправлено
+                pass
     except Exception as e:
         logging.error(f"Помилка фонового запису в Google Form: {e}")
 
@@ -124,7 +129,7 @@ async def start_web_server():
 # /start
 @dp.message(CommandStart())
 async def start_handler(message: types.Message):
-    asyncio.create_task(log_user_to_google_form(message.from_user))
+    asyncio.create_task(log_user_to_google_form(message.from_user, "/start"))
     await message.answer(
         ABOUT_TEXT, reply_markup=main_keyboard, parse_mode="Markdown"
     )
@@ -133,7 +138,7 @@ async def start_handler(message: types.Message):
 # ℹ️ Про бота
 @dp.message(F.text == "ℹ️ Про бота")
 async def about_handler(message: types.Message):
-    asyncio.create_task(log_user_to_google_form(message.from_user))
+    asyncio.create_task(log_user_to_google_form(message.from_user, "ℹ️ Про бота"))
     await message.answer(
         ABOUT_TEXT, reply_markup=main_keyboard, parse_mode="Markdown"
     )
@@ -145,8 +150,8 @@ async def stats_handler(message: types.Message):
     if message.from_user.id == ADMIN_ID:
         await message.answer(
             f"📊 **Поточна статистика сесії:**\n\n"
-            f"Активних користувачів після останнього деплою: **{len(users_db)}**\n\n"
-            f"💡 *Повну та незмінну базу унікальних користувачів за весь час дивіться у вашій Google Таблиці (аркуш «Відповіді на форму 1»).*",
+            f"Активних користувачів у пам'яті: **{len(users_db)}**\n\n"
+            f"💡 *Повну статистику унікальних користувачів та кліків по кнопках дивіться у вашій Google Таблиці (аркуш «Відповіді на форму 1»).*",
             parse_mode="Markdown",
         )
     else:
@@ -172,9 +177,7 @@ async def broadcast_handler(message: types.Message):
         return
 
     if not users_db:
-        await message.answer(
-            "⚠️ База активної сесії порожня. Користувачі додаються при взаємодії з ботом."
-        )
+        await message.answer("⚠️ База активної сесії порожня.")
         return
 
     status_msg = await message.answer(
@@ -192,188 +195,3 @@ async def broadcast_handler(message: types.Message):
             successful += 1
             await asyncio.sleep(0.05)
         except Exception as e:
-            logging.error(f"Не вдалося надіслати {user_id}: {e}")
-            failed += 1
-
-    await status_msg.edit_text(
-        f"✅ **Розсилку завершено!**\n\n"
-        f"Успішно доставлено: **{successful}**\n"
-        f"Не доставлено: **{failed}**",
-        parse_mode="Markdown",
-    )
-
-
-# 📢 Дайджест дозвільних процедур
-@dp.message(F.text == "📢 Дайджест дозвільних процедур")
-async def digest_handler(message: types.Message):
-    asyncio.create_task(log_user_to_google_form(message.from_user))
-    msg = await message.answer("🔄 Завантажую актуальний дайджест...")
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(GOOGLE_SHEET_CSV_URL) as response:
-                if response.status != 200:
-                    await msg.edit_text(
-                        "⚠️ Не вдалося завантажити Google Таблицю (помилка доступу)."
-                    )
-                    return
-                content = await response.text()
-
-        f = io.StringIO(content)
-        reader = csv.DictReader(f)
-
-        text_lines = ["📢 **Дайджест дозвільних процедур (ОВД/СЕО)**\n"]
-        has_cases = False
-
-        for row in reader:
-            tp = row.get("Тип дозвільної процедури", "").strip()
-            company = row.get("Підприємство/Замовник", "").strip()
-            case_num = row.get("Номер справи", "").strip()
-            desc = row.get("Короткий опис діяльності", "").strip()
-            stage = row.get("Стадія", "").strip()
-            deadline = row.get("Дедлайн для подання зауважень", "").strip()
-            hearings = row.get("Дата та час слухань", "").strip()
-            link = row.get("Посилання на справу в Реєстрі", "").strip()
-            hearings_link = row.get(
-                "Посилання на громадські слухання", ""
-            ).strip()
-
-            if not company and not case_num:
-                continue
-
-            has_cases = True
-            header = f"🔹 **{tp} {company}**"
-            if case_num:
-                header += f" (Справа №`{case_num}`)"
-
-            text_lines.append(header)
-            if desc:
-                text_lines.append(f"• **Діяльність:** {desc}")
-            if stage:
-                text_lines.append(f"• **Стадія:** {stage}")
-            if hearings:
-                text_lines.append(f"• **Слухання:** {hearings}")
-            if deadline:
-                text_lines.append(f"• **Дедлайн зауважень:** {deadline}")
-            if link and link.startswith("http"):
-                text_lines.append(f"🌐 [Переглянути у Реєстрі]({link})")
-            if hearings_link and hearings_link.startswith("http"):
-                text_lines.append(
-                    f"🎧 [Долучитися / Інфо про слухання]({hearings_link})"
-                )
-
-            text_lines.append("")
-
-        if not has_cases:
-            await msg.edit_text(
-                "📢 **Дайджест дозвільних процедур**\n\nНаразі немає активних справ у реєстрі."
-            )
-            return
-
-        text_lines.append(
-            "📌 *Для завантаження шаблонів зауважень скористайтеся розділом «📋 Подати скаргу / звернення».*"
-        )
-        final_text = "\n".join(text_lines)
-
-        try:
-            await msg.edit_text(
-                final_text, parse_mode="Markdown", disable_web_page_preview=True
-            )
-        except Exception:
-            await msg.edit_text(final_text, disable_web_page_preview=True)
-
-    except Exception as e:
-        logging.error(f"Помилка дайджесту: {e}")
-        await msg.edit_text(
-            "⚠️ Виникла помилка під час оновлення дайджесту. Перевірте посилання на CSV у коді."
-        )
-
-
-# ℹ️ Контакти ГС «ДТКР»
-@dp.message(F.text == "ℹ️ Контакти ГС «ДТКР»")
-async def contacts_handler(message: types.Message):
-    asyncio.create_task(log_user_to_google_form(message.from_user))
-
-    text = (
-        "🌿 **Громадська спілка «Досить труїти Кривий Ріг» (ГС ДТКР)**\n\n"
-        "Ми об'єднуємо містян, експертів та активістів задля екологічної безпеки та сталого розвитку України.\n"
-        "Обирайте зручний майданчик та стежте за нашими новинами, анонсами та екологічними моніторингами!"
-    )
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🌐 Офіційний сайт", url="https://dtkr.com.ua"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📸 Instagram",
-                    url="https://www.instagram.com/stop_poisoning_kryvyi_rih/",
-                ),
-                InlineKeyboardButton(
-                    text="🎵 TikTok",
-                    url="https://www.tiktok.com/@stop_poisoning_kr?_t=ZM-90v9ja7KDf6&_r=1",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📘 Facebook",
-                    url="https://www.facebook.com/dosytKR/",
-                ),
-                InlineKeyboardButton(
-                    text="✈️ Telegram-канал", url="https://t.me/stoppoisonKR"
-                ),
-            ],
-        ]
-    )
-
-    await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
-
-
-# Заглушки для майбутнього наповнення
-@dp.message(F.text == "📋 Подати скаргу / звернення")
-async def complaints_handler(message: types.Message):
-    asyncio.create_task(log_user_to_google_form(message.from_user))
-    await message.answer(
-        "📋 Розділ **«Подати скаргу / звернення»** наразі наповнюється матеріалами."
-    )
-
-
-@dp.message(F.text == "📞 Довідник інстанцій")
-async def directory_handler(message: types.Message):
-    asyncio.create_task(log_user_to_google_form(message.from_user))
-    await message.answer(
-        "📞 Розділ **«Довідник інстанцій»** наразі наповнюється контактами."
-    )
-
-
-@dp.message(F.text == "📚 База знань")
-async def kb_handler(message: types.Message):
-    asyncio.create_task(log_user_to_google_form(message.from_user))
-    await message.answer(
-        "📚 Розділ **«База знань»** наразі наповнюється статтями."
-    )
-
-
-@dp.message(F.text == "🎓 Школа зеленої демократії")
-async def school_handler(message: types.Message):
-    asyncio.create_task(log_user_to_google_form(message.from_user))
-    await message.answer(
-        "🎓 Розділ **«Школа зеленої демократії»** готує анонси нових тренінгів."
-    )
-
-
-# ==========================================
-# 🚀 ЗАПУСК СЕРВЕРУ ТА БОТА
-# ==========================================
-
-
-async def main():
-    await start_web_server()
-    await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
