@@ -177,12 +177,16 @@ async def digest_handler(message: types.Message):
             deadline = row.get("Дедлайн для подання зауважень", "").strip()
             hearings = row.get("Дата та час слухань", "").strip()
             link = row.get("Посилання на справу в Реєстрі", "").strip()
+            # 📌 Зчитуємо новий стовпчик:
+            hearings_link = row.get(
+                "Посилання на громадські слухання", ""
+            ).strip()
 
             if not company and not case_num:
                 continue
 
             has_cases = True
-            header = f"🔹 **[{tp}] {company}**"
+            header = f"🔹 **{tp} {company}**"
             if case_num:
                 header += f" (Справа №`{case_num}`)"
 
@@ -196,7 +200,12 @@ async def digest_handler(message: types.Message):
             if deadline:
                 text_lines.append(f"• **Дедлайн зауважень:** {deadline}")
             if link and link.startswith("http"):
-                text_lines.append(f"🌐 [Переглянути у Реєстрі]({link})")
+                text_lines.append(f"🌐 [Переглянути справу у Реєстрі]({link})")
+            # 📌 Додаємо посилання на слухання, якщо воно вказане у таблиці:
+            if hearings_link and hearings_link.startswith("http"):
+                text_lines.append(
+                    f"🎧 [Долучитися до громадських слухань]({hearings_link})"
+                )
 
             text_lines.append("")
 
@@ -211,13 +220,11 @@ async def digest_handler(message: types.Message):
         )
         final_text = "\n".join(text_lines)
 
-        # Спочатку пробуємо відправити з форматуванням Markdown
         try:
             await msg.edit_text(
                 final_text, parse_mode="Markdown", disable_web_page_preview=True
             )
         except Exception:
-            # Якщо у тексті були спеціальні символи, відправляємо як звичайний текст
             await msg.edit_text(final_text, disable_web_page_preview=True)
 
     except Exception as e:
@@ -225,7 +232,6 @@ async def digest_handler(message: types.Message):
         await msg.edit_text(
             "⚠️ Виникла помилка під час оновлення дайджесту. Перевірте посилання на CSV у коді."
         )
-
 
 @dp.message(F.text == "📞 Довідник інстанцій")
 async def contacts_directory_handler(message: types.Message):
