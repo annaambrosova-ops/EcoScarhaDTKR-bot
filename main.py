@@ -195,3 +195,206 @@ async def broadcast_handler(message: types.Message):
             successful += 1
             await asyncio.sleep(0.05)
         except Exception as e:
+            logging.error(f"Не вдалося надіслати {user_id}: {e}")
+            failed += 1
+
+    await status_msg.edit_text(
+        f"✅ **Розсилку завершено!**\n\n"
+        f"Успішно доставлено: **{successful}**\n"
+        f"Не доставлено: **{failed}**",
+        parse_mode="Markdown",
+    )
+
+
+# 📢 Дайджест дозвільних процедур
+@dp.message(F.text == "📢 Дайджест дозвільних процедур")
+async def digest_handler(message: types.Message):
+    asyncio.create_task(
+        log_user_to_google_form(
+            message.from_user, "📢 Дайджест дозвільних процедур"
+        )
+    )
+    msg = await message.answer("🔄 Завантажую актуальний дайджест...")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(GOOGLE_SHEET_CSV_URL) as response:
+                if response.status != 200:
+                    await msg.edit_text(
+                        "⚠️ Не вдалося завантажити Google Таблицю (помилка доступу)."
+                    )
+                    return
+                content = await response.text()
+
+        f = io.StringIO(content)
+        reader = csv.DictReader(f)
+
+        text_lines = ["📢 **Дайджест дозвільних процедур (ОВД/СЕО)**\n"]
+        has_cases = False
+
+        for row in reader:
+            tp = row.get("Тип дозвільної процедури", "").strip()
+            company = row.get("Підприємство/Замовник", "").strip()
+            case_num = row.get("Номер справи", "").strip()
+            desc = row.get("Короткий опис діяльності", "").strip()
+            stage = row.get("Стадія", "").strip()
+            deadline = row.get("Дедлайн для подання зауважень", "").strip()
+            hearings = row.get("Дата та час слухань", "").strip()
+            link = row.get("Посилання на справу в Реєстрі", "").strip()
+            hearings_link = row.get(
+                "Посилання на громадські слухання", ""
+            ).strip()
+
+            if not company and not case_num:
+                continue
+
+            has_cases = True
+            header = f"🔹 **{tp} {company}**"
+            if case_num:
+                header += f" (Справа №`{case_num}`)"
+
+            text_lines.append(header)
+            if desc:
+                text_lines.append(f"• **Діяльність:** {desc}")
+            if stage:
+                text_lines.append(f"• **Стадія:** {stage}")
+            if hearings:
+                text_lines.append(f"• **Слухання:** {hearings}")
+            if deadline:
+                text_lines.append(f"• **Дедлайн зауважень:** {deadline}")
+            if link and link.startswith("http"):
+                text_lines.append(f"🌐 [Переглянути у Реєстрі]({link})")
+            if hearings_link and hearings_link.startswith("http"):
+                text_lines.append(
+                    f"🎧 [Долучитися / Інфо про слухання]({hearings_link})"
+                )
+
+            text_lines.append("")
+
+        if not has_cases:
+            await msg.edit_text(
+                "📢 **Дайджест дозвільних процедур**\n\nНаразі немає активних справ у реєстрі."
+            )
+            return
+
+        text_lines.append(
+            "📌 *Для завантаження шаблонів зауважень скористайтеся розділом «📋 Подати скаргу / звернення».*"
+        )
+        final_text = "\n".join(text_lines)
+
+        try:
+            await msg.edit_text(
+                final_text, parse_mode="Markdown", disable_web_page_preview=True
+            )
+        except Exception:
+            await msg.edit_text(final_text, disable_web_page_preview=True)
+
+    except Exception as e:
+        logging.error(f"Помилка дайджесту: {e}")
+        await msg.edit_text(
+            "⚠️ Виникла помилка під час оновлення дайджесту. Перевірте посилання на CSV у коді."
+        )
+
+
+# ℹ️ Контакти ГС «ДТКР»
+@dp.message(F.text == "ℹ️ Контакти ГС «ДТКР»")
+async def contacts_handler(message: types.Message):
+    asyncio.create_task(
+        log_user_to_google_form(message.from_user, "ℹ️ Контакти ГС «ДТКР»")
+    )
+
+    text = (
+        "🌿 **Громадська спілка «Досить труїти Кривий Ріг» (ГС ДТКР)**\n\n"
+        "Ми об'єднуємо містян, експертів та активістів задля екологічної безпеки та сталого розвитку України.\n"
+        "Обирайте зручний майданчик та стежте за нашими новинами, анонсами та екологічними моніторингами!"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🌐 Офіційний сайт", url="https://dtkr.com.ua"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📸 Instagram",
+                    url="https://www.instagram.com/stop_poisoning_kryvyi_rih/",
+                ),
+                InlineKeyboardButton(
+                    text="🎵 TikTok",
+                    url="https://www.tiktok.com/@stop_poisoning_kr?_t=ZM-90v9ja7KDf6&_r=1",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📘 Facebook",
+                    url="https://www.facebook.com/dosytKR/",
+                ),
+                InlineKeyboardButton(
+                    text="✈️ Telegram-канал", url="https://t.me/stoppoisonKR"
+                ),
+            ],
+        ]
+    )
+
+    await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
+
+
+# Заглушки для інших кнопок
+@dp.message(F.text == "📋 Подати скаргу / звернення")
+async def complaints_handler(message: types.Message):
+    asyncio.create_task(
+        log_user_to_google_form(
+            message.from_user, "📋 Подати скаргу / звернення"
+        )
+    )
+    await message.answer(
+        "📋 Розділ **«Подати скаргу / звернення»** наразі наповнюється матеріалами."
+    )
+
+
+@dp.message(F.text == "📞 Довідник інстанцій")
+async def directory_handler(message: types.Message):
+    asyncio.create_task(
+        log_user_to_google_form(message.from_user, "📞 Довідник інстанцій")
+    )
+    await message.answer(
+        "📞 Розділ **«Довідник інстанцій»** наразі наповнюється контактами."
+    )
+
+
+@dp.message(F.text == "📚 База знань")
+async def kb_handler(message: types.Message):
+    asyncio.create_task(
+        log_user_to_google_form(message.from_user, "📚 База знань")
+    )
+    await message.answer(
+        "📚 Розділ **«База знань»** наразі наповнюється статтями."
+    )
+
+
+@dp.message(F.text == "🎓 Школа зеленої демократії")
+async def school_handler(message: types.Message):
+    asyncio.create_task(
+        log_user_to_google_form(
+            message.from_user, "🎓 Школа зеленої демократії"
+        )
+    )
+    await message.answer(
+        "🎓 Розділ **«Школа зеленої демократії»** готує анонси нових тренінгів."
+    )
+
+
+# ==========================================
+# 🚀 ЗАПУСК СЕРВЕРУ ТА БОТА
+# ==========================================
+
+
+async def main():
+    await start_web_server()
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
