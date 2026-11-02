@@ -19,13 +19,13 @@ from aiohttp import web
 # 🔑 НАЛАШТУВАННЯ ТА НАЛАШТОВУВАНІ ЗМІННІ
 # ==========================================
 
-BOT_TOKEN = "8949974589:AAEF_mtYAqsgHhOTFFswyLET2FkDycSGG88"  # Вкажіть ваш актуальний токен бота
-ADMIN_ID = 123456789  # Вкажіть ваш Telegram ID
+BOT_TOKEN = "8949974589:AAEF_mtYAqsgHhOTFFswyLET2FkDycSGG88"
+ADMIN_ID = 1218438551
 
-# 🔗 Ваше публічне CSV-посилання на Google Таблицю Дайджесту
+# 🔗 Публічне CSV-посилання на Google Таблицю Дайджесту
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQX4VVekM7ZCLhwk1HRuUXPVCK0L5uQgmulQd60j3skRWuZe43cICCCJy-nw8uRREW4X-IecsWZ2APN/pub?gid=0&single=true&output=csv"
 
-# 📌 Текст опису бота (використовується для /start та кнопки "ℹ️ Про бота")
+# 📌 Опис бота (для /start та кнопки "ℹ️ Про бота")
 ABOUT_TEXT = (
     "🤖 **Ласкаво просимо до бота «ЕкоСкарга ДТКР»!**\n\n"
     "Цей цифровий сервіс створено Громадською спілкою «Досить труїти Кривий Ріг» "
@@ -47,10 +47,9 @@ dp = Dispatcher()
 
 
 # ==========================================
-# ⌨️ КЛАВІАТУРИ Меню
+# ⌨️ КЛАВІАТУРИ
 # ==========================================
 
-# 1. Головна клавіатура
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Подати скаргу / звернення")],
@@ -115,19 +114,67 @@ async def about_handler(message: types.Message):
     )
 
 
-# /stats (Адміністративна статистика)
+# 📊 /stats (Адміністративна статистика)
 @dp.message(Command("stats"))
 async def stats_handler(message: types.Message):
     if message.from_user.id == ADMIN_ID:
         await message.answer(
-            f"📊 **Статистика бота:**\n\nКількість унікальних користувачів: **{len(users_db)}**",
+            f"📊 **Статистика бота:**\n\nВсього користувачів у базі: **{len(users_db)}**",
             parse_mode="Markdown",
         )
     else:
         await message.answer("⚠️ Ця команда доступна лише адміністратору.")
 
 
-# 📢 Дайджест дозвільних процедур (Отримання CSV з Google Sheets)
+# 📢 /broadcast (Масова розсилка від адміна)
+@dp.message(Command("broadcast"))
+async def broadcast_handler(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⚠️ Ця команда доступна лише адміністратору.")
+        return
+
+    text_to_send = message.text.replace("/broadcast", "").strip()
+
+    if not text_to_send:
+        await message.answer(
+            "⚠️ **Як користуватися розсилкою:**\n\n"
+            "Введіть команду та через пробіл напишіть текст повідомлення.\n\n"
+            "Приклад:\n`/broadcast Шановні підписники! Оновлено дайджест процедур ОВД.`",
+            parse_mode="Markdown",
+        )
+        return
+
+    if not users_db:
+        await message.answer("⚠️ База користувачів поки порожня.")
+        return
+
+    status_msg = await message.answer(
+        f"🚀 Розпочинаю розсилку для {len(users_db)} користувачів..."
+    )
+
+    successful = 0
+    failed = 0
+
+    for user_id in list(users_db):
+        try:
+            await bot.send_message(
+                user_id, text_to_send, disable_web_page_preview=True
+            )
+            successful += 1
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            logging.error(f"Не вдалося надіслати {user_id}: {e}")
+            failed += 1
+
+    await status_msg.edit_text(
+        f"✅ **Розсилку завершено!**\n\n"
+        f"Успішно доставлено: **{successful}**\n"
+        f"Не доставлено (заблокували бота): **{failed}**",
+        parse_mode="Markdown",
+    )
+
+
+# 📢 Дайджест дозвільних процедур
 @dp.message(F.text == "📢 Дайджест дозвільних процедур")
 async def digest_handler(message: types.Message):
     users_db.add(message.from_user.id)
@@ -256,7 +303,7 @@ async def contacts_handler(message: types.Message):
     await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
 
 
-# 📋 Подати скаргу / звернення (Заглушка для майбутніх кнопок)
+# Заглушки для майбутнього наповнення
 @dp.message(F.text == "📋 Подати скаргу / звернення")
 async def complaints_handler(message: types.Message):
     users_db.add(message.from_user.id)
@@ -265,7 +312,6 @@ async def complaints_handler(message: types.Message):
     )
 
 
-# 📞 Довідник інстанцій (Заглушка для майбутніх кнопок)
 @dp.message(F.text == "📞 Довідник інстанцій")
 async def directory_handler(message: types.Message):
     users_db.add(message.from_user.id)
@@ -274,7 +320,6 @@ async def directory_handler(message: types.Message):
     )
 
 
-# 📚 База знань
 @dp.message(F.text == "📚 База знань")
 async def kb_handler(message: types.Message):
     users_db.add(message.from_user.id)
@@ -283,7 +328,6 @@ async def kb_handler(message: types.Message):
     )
 
 
-# 🎓 Школа зеленої демократії
 @dp.message(F.text == "🎓 Школа зеленої демократії")
 async def school_handler(message: types.Message):
     users_db.add(message.from_user.id)
@@ -298,7 +342,7 @@ async def school_handler(message: types.Message):
 
 
 async def main():
-    await start_web_server()  # Відкриває порт для Render
+    await start_web_server()
     await dp.start_polling(bot)
 
 
