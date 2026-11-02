@@ -23,7 +23,7 @@ BOT_TOKEN = "8949974589:AAEF_mtYAqsgHhOTFFswyLET2FkDycSGG88"  # Вкажіть �
 ADMIN_ID = 123456789  # Вкажіть ваш Telegram ID
 
 # 🔗 Ваше публічне CSV-посилання на Google Таблицю Дайджесту
-GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQX4VVekM7ZCLhwk1HRuUXPVCKOL5uQgmulQd60j3skRWuZe43cICCCJy-nw8uRREW4X-lecsWZ2APN/pub?gid=0&single=true&output=csv"
+GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQX4VVekM7ZCLhwk1HRuUXPVCK0L5uQgmulQd60j3skRWuZe43cICCCJy-nw8uRREW4X-IecsWZ2APN/pub?gid=0&single=true&output=csv"
 
 # 📌 Текст опису бота (використовується для /start та кнопки "ℹ️ Про бота")
 ABOUT_TEXT = (
