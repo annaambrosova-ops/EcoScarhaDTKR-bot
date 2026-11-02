@@ -283,18 +283,43 @@ async def school_handler(message: types.Message):
 
 
 @dp.message(F.text == "ℹ️ Контакти ГС «ДТКР»")
-async def dtkr_info_handler(message: types.Message):
+async def contacts_handler(message: types.Message):
     users_db.add(message.from_user.id)
+
     text = (
-        "ℹ️ **Громадська спілка «Досить труїти Кривий Ріг» (ДТКР)**\n\n"
-        "Працюємо задля чистого довкілля та безпечного майбутнього Криворіжжя.\n\n"
-        "🌐 **Сайт:** [dtkr.com.ua](https://dtkr.com.ua)\n"
-        "✉️ **Email:** ecodtkr@gmail.com\n"
-        "📲 **Facebook:** facebook.com/dosytKR \n"
+        "🌿 **Громадська спілка «Досить труїти Кривий Ріг» (ГС «ДТКР»)**\n\n"
+        "Ми об'єднуємо містян, експертів та активістів задля екологічної безпеки та сталого розвитку України. Обирайте зручний майданчик та стежте за нашими новинами та анонсами!"
     )
-    await message.answer(
-        text, parse_mode="Markdown", disable_web_page_preview=True
+
+    # 🔘 Інлайн-клавіатура з посиланнями
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🌐 Офіційний сайт", url="https://dtkr.com.ua"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📸 Instagram",
+                    url="https://www.instagram.com/stop_poisoning_kryvyi_rih/",
+                ),
+                InlineKeyboardButton(
+                    text="🎵 TikTok", url="https://www.tiktok.com/@stop_poisoning_kr?_t=ZM-90v9ja7KDf6&_r=1"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📘 Facebook", url="https://www.facebook.com/dosytKR/"
+                ),
+                InlineKeyboardButton(
+                    text="✈️ Telegram-канал", url="https://t.me/stoppoisonKR"
+                ),
+            ],
+        ]
     )
+
+    await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
 
 
 # --- 6. ЗАПУСК БОТА ТА ВЕБ-СЕРВЕРА ОДНОЧАСНО ---
