@@ -3,8 +3,8 @@ import csv
 import io
 import logging
 import os
+
 import aiohttp
-from aiohttp import web  
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
@@ -13,14 +13,32 @@ from aiogram.types import (
     KeyboardButton,
     ReplyKeyboardMarkup,
 )
+from aiohttp import web
 
-# 🔑 Ваш токен від BotFather
-BOT_TOKEN = "8949974589:AAEF_mtYAqsgHhOTFFswyLET2FkDycSGG88"
+# ==========================================
+# 🔑 НАЛАШТУВАННЯ ТА НАЛАШТОВУВАНІ ЗМІННІ
+# ==========================================
 
-# 👑 Ваш Telegram ID для адмін-команд (щоб дізнатися свій ID, напишіть боту @userinfobot)
-ADMIN_ID = 1218438551
+BOT_TOKEN = "8121175620:AAG-ВАШ_ТОКЕН_СЮДИ"  # Вкажіть ваш актуальний токен бота
+ADMIN_ID = 123456789  # Вкажіть ваш Telegram ID
 
-# Просте збереження користувачів у пам'яті (у множину)
+# 🔗 Ваше публічне CSV-посилання на Google Таблицю Дайджесту
+GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQX4VVekM7ZCLhwk1HRuUXPVCKOL5uQgmulQd60j3skRWuZe43cICCCJy-nw8uRREW4X-lecsWZ2APN/pub?gid=0&single=true&output=csv"
+
+# 📌 Текст опису бота (використовується для /start та кнопки "ℹ️ Про бота")
+ABOUT_TEXT = (
+    "🤖 **Ласкаво просимо до бота «ЕкоСкарга ДТКР»!**\n\n"
+    "Цей цифровий сервіс створено Громадською спілкою «Досить труїти Кривий Ріг» "
+    "за підтримки ПРООН у межах проєкту «Зелена демократія та громадський контроль».\n\n"
+    "**Чим корисний бот:**\n"
+    "• 📋 **Подати скаргу / звернення:** покрокові алгоритми та завантаження готових шаблонів звернень (.docx).\n"
+    "• 📢 **Дайджест дозвільних процедур:** щотижневий моніторинг ОВД/СЕО, дедлайнів та громадських слухань.\n"
+    "• 📞 **Довідник інстанцій:** контакти та гарячі лінії контролюючих органів.\n"
+    "• 📚 **База знань:** роз'яснення екологічних прав та норм законодавства.\n\n"
+    "💡 Обирайте потрібний розділ у меню нижче, щоб розпочати роботу!"
+)
+
+# База користувачів у пам'яті
 users_db = set()
 
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +46,36 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 
-# --- 1. ФІКТИВНИЙ ВЕБ-СЕРВЕР ДЛЯ RENDER (ЩОБ БОТ НЕ ВИМИКАВСЯ) ---
+# ==========================================
+# ⌨️ КЛАВІАТУРИ Меню
+# ==========================================
+
+# 1. Головна клавіатура
+main_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📋 Подати скаргу / звернення")],
+        [
+            KeyboardButton(text="📢 Дайджест дозвільних процедур"),
+            KeyboardButton(text="📞 Довідник інстанцій"),
+        ],
+        [
+            KeyboardButton(text="📚 База знань"),
+            KeyboardButton(text="🎓 Школа зеленої демократії"),
+        ],
+        [
+            KeyboardButton(text="ℹ️ Контакти ГС «ДТКР»"),
+            KeyboardButton(text="ℹ️ Про бота"),
+        ],
+    ],
+    resize_keyboard=True,
+)
+
+
+# ==========================================
+# 🌐 ВЕБ-СЕРВЕР ДЛЯ RENDER (Keep-Alive)
+# ==========================================
+
+
 async def handle_healthcheck(request):
     return web.Response(
         text="EcoScarha DTKR Bot is running 24/7!", status=200
@@ -40,114 +87,48 @@ async def start_web_server():
     app.router.add_get("/", handle_healthcheck)
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 10000))  # Render передає порт автоматично
+    port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
 
-# --- 2. ГОЛОВНЕ МЕНЮ ---
-main_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [
-            KeyboardButton(text="📋 Подати скаргу / звернення"),
-            KeyboardButton(text="📢 Дайджест ОВД та СЕО"),
-        ],
-        [
-            KeyboardButton(text="📞 Довідник інстанцій"),
-            KeyboardButton(text="📚 База знань та алгоритми"),
-        ],
-        [
-            KeyboardButton(text="🎓 Школа зеленої демократії"),
-            KeyboardButton(text="ℹ️ Контакти ГС «ДТКР»"),
-        ],
-    ],
-    resize_keyboard=True,
-    persistent=True,
-)
+# ==========================================
+# 🤖 ОБРОБНИКИ КОМАНД ТА КНОПОК
+# ==========================================
 
 
-# --- 3. ОБРОБКА КОМАНДИ /start ТА ЗБЕРЕЖЕННЯ КОРИСТУВАЧІВ ---
+# /start
 @dp.message(CommandStart())
 async def start_handler(message: types.Message):
     users_db.add(message.from_user.id)
-
-    welcome_text = (
-        "🌿 **Вітаємо у Telegram-сервісі «ЕкоСкарга ДТКР»!**\n\n"
-        "Цей цифровий інструмент створений **ГС «Досить труїти Кривий Ріг»** за підтримки ПРООН "
-        "у межах проєкту «Зелена демократія та громадський контроль».\n\n"
-        "**За допомогою бота ви можете:**\n"
-        "📋 Отримати шаблони скарг та звернень\n"
-        "📢 Моніторити актуальні справи ОВД та СЕО\n"
-        "📞 Знайти контакти екологічних інстанцій\n"
-        "📚 Ознайомитися з алгоритмами захисту довкіллєвих прав\n"
-        "🎓 Долучитися до Школи зеленої демократії\n\n"
-        "🔻 **Оберіть потрібний розділ у меню нижче:**"
-    )
     await message.answer(
-        welcome_text, reply_markup=main_keyboard, parse_mode="Markdown"
+        ABOUT_TEXT, reply_markup=main_keyboard, parse_mode="Markdown"
     )
 
 
-# --- 4. АДМІН-КОМАНДА /stats ДЛЯ ПЕРЕГЛЯДУ ПІДПИСНИКІВ ---
+# ℹ️ Про бота
+@dp.message(F.text == "ℹ️ Про бота")
+async def about_handler(message: types.Message):
+    users_db.add(message.from_user.id)
+    await message.answer(
+        ABOUT_TEXT, reply_markup=main_keyboard, parse_mode="Markdown"
+    )
+
+
+# /stats (Адміністративна статистика)
 @dp.message(Command("stats"))
 async def stats_handler(message: types.Message):
-    # Дозволяємо перегляд лише адміну або показуємо для всіх за бажанням
-    count = len(users_db)
-    await message.answer(
-        f"📊 **Статистика бота:**\n\n"
-        f"👥 Загальна кількість користувачів, що запускали бота: **{count}**",
-        parse_mode="Markdown",
-    )
+    if message.from_user.id == ADMIN_ID:
+        await message.answer(
+            f"📊 **Статистика бота:**\n\nКількість унікальних користувачів: **{len(users_db)}**",
+            parse_mode="Markdown",
+        )
+    else:
+        await message.answer("⚠️ Ця команда доступна лише адміністратору.")
 
 
-# --- 5. ОБРОБКА КНОПОК МЕНЮ ---
-@dp.message(F.text == "📋 Подати скаргу / звернення")
-async def appeals_handler(message: types.Message):
-    users_db.add(message.from_user.id)
-    text = (
-        "📋 **Конструктор звернень та скарг**\n\n"
-        "Оберіть категорію порушення, щоб отримати готовий шаблон документа (.docx) "
-        "та інструкцію щодо заповнення:"
-    )
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="💨 Забруднення повітря / пил",
-                    callback_data="template_air",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🗑️ Несанкціоноване сміттєзвалище",
-                    callback_data="template_waste",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🌳 Вирубка зелених насаджень",
-                    callback_data="template_trees",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💧 Забруднення водойм / скиди",
-                    callback_data="template_water",
-                )
-            ],
-        ]
-    )
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
-
-
-import csv
-import io
-
-# 🔗 Вставте сюди скопійоване CSV-посилання з пунктів вище
-GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQX4VVekM7ZCLhwk1HRuUXPVCK0L5uQgmulQd60j3skRWuZe43cICCCJy-nw8uRREW4X-IecsWZ2APN/pub?gid=0&single=true&output=csv"
-
-
-@dp.message(F.text == "📢 Дайджест ОВД та СЕО")
+# 📢 Дайджест дозвільних процедур (Отримання CSV з Google Sheets)
+@dp.message(F.text == "📢 Дайджест дозвільних процедур")
 async def digest_handler(message: types.Message):
     users_db.add(message.from_user.id)
     msg = await message.answer("🔄 Завантажую актуальний дайджест...")
@@ -165,7 +146,7 @@ async def digest_handler(message: types.Message):
         f = io.StringIO(content)
         reader = csv.DictReader(f)
 
-        text_lines = ["📢 **Дайджест процедур ОВД та СЕО**\n"]
+        text_lines = ["📢 **Дайджест дозвільних процедур (ОВД/СЕО)**\n"]
         has_cases = False
 
         for row in reader:
@@ -177,7 +158,6 @@ async def digest_handler(message: types.Message):
             deadline = row.get("Дедлайн для подання зауважень", "").strip()
             hearings = row.get("Дата та час слухань", "").strip()
             link = row.get("Посилання на справу в Реєстрі", "").strip()
-            # 📌 Зчитуємо новий стовпчик:
             hearings_link = row.get(
                 "Посилання на громадські слухання", ""
             ).strip()
@@ -200,18 +180,17 @@ async def digest_handler(message: types.Message):
             if deadline:
                 text_lines.append(f"• **Дедлайн зауважень:** {deadline}")
             if link and link.startswith("http"):
-                text_lines.append(f"🌐 [Переглянути справу у Реєстрі]({link})")
-            # 📌 Додаємо посилання на слухання, якщо воно вказане у таблиці:
+                text_lines.append(f"🌐 [Переглянути у Реєстрі]({link})")
             if hearings_link and hearings_link.startswith("http"):
                 text_lines.append(
-                    f"🎧 [Долучитися до громадських слухань]({hearings_link})"
+                    f"🎧 [Долучитися / Інфо про слухання]({hearings_link})"
                 )
 
             text_lines.append("")
 
         if not has_cases:
             await msg.edit_text(
-                "📢 **Дайджест ОВД та СЕО**\n\nНаразі немає активних справ у реєстрі."
+                "📢 **Дайджест дозвільних процедур**\n\nНаразі немає активних справ у реєстрі."
             )
             return
 
@@ -233,65 +212,18 @@ async def digest_handler(message: types.Message):
             "⚠️ Виникла помилка під час оновлення дайджесту. Перевірте посилання на CSV у коді."
         )
 
-@dp.message(F.text == "📞 Довідник інстанцій")
-async def contacts_directory_handler(message: types.Message):
-    users_db.add(message.from_user.id)
-    text = (
-        "📞 **Довідник контролюючих органів та гарячих ліній:**\n\n"
-        "🔹 **Державна екологічна інспекція Південно-Західного округу**\n"
-        "• Гаряча лінія: +38 (048) 705-40-00\n"
-        "• Email: pzo@dei.gov.ua\n\n"
-        "🔹 **Виконавчий комітет Криворізької міської ради**\n"
-        "• Телефон: 1520 (управління екології)\n"
-        "• Email: radakr@kr.gov.ua\n\n"
-        "🔹 **Держпродспоживслужба у Дніпропетровській обл.**\n"
-        "• Телефон: +38 (099) 723-16-99"
-    )
-    await message.answer(text, parse_mode="Markdown")
 
-
-@dp.message(F.text == "📚 База знань та алгоритми")
-async def knowledge_base_handler(message: types.Message):
-    users_db.add(message.from_user.id)
-    text = (
-        "📚 **База знань та алгоритми дій**\n\n"
-        "• **Право на безпечне довкілля:** ст. 50 Конституції України.\n"
-        "• **Build Back Better:** Принципи екологічної та сталої відбудови промислових регіонів.\n"
-        "• **Розділ 27 EU Acquis:** Вимоги ЄС у сфері охорони довкілля та зміни клімату."
-    )
-    await message.answer(text, parse_mode="Markdown")
-
-
-@dp.message(F.text == "🎓 Школа зеленої демократії")
-async def school_handler(message: types.Message):
-    users_db.add(message.from_user.id)
-    text = (
-        "🎓 **Школа зеленої демократії**\n\n"
-        "Освітня програма від ГС «ДТКР» для активних містян, лідерів ОСББ та молоді."
-    )
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🌐 Перейти на сторінку Школи",
-                    url="https://dtkr.com.ua",
-                )
-            ]
-        ]
-    )
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
-
-
+# ℹ️ Контакти ГС «ДТКР»
 @dp.message(F.text == "ℹ️ Контакти ГС «ДТКР»")
 async def contacts_handler(message: types.Message):
     users_db.add(message.from_user.id)
 
     text = (
-        "🌿 **Громадська спілка «Досить труїти Кривий Ріг» (ГС «ДТКР»)**\n\n"
-        "Ми об'єднуємо містян, експертів та активістів задля екологічної безпеки та сталого розвитку України. Обирайте зручний майданчик та стежте за нашими новинами та анонсами!"
+        "🌿 **Громадська спілка «Досить труїти Кривий Ріг» (ГС ДТКР)**\n\n"
+        "Ми об'єднуємо містян, експертів та активістів задля екологічної безпеки та сталого розвитку України.
+         Обирайте зручний майданчик та стежте за нашими новинами, анонсами та екологічними моніторингами!"
     )
 
-    # 🔘 Інлайн-клавіатура з посиланнями
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -310,7 +242,8 @@ async def contacts_handler(message: types.Message):
             ],
             [
                 InlineKeyboardButton(
-                    text="📘 Facebook", url="https://www.facebook.com/dosytKR/"
+                    text="📘 Facebook",
+                    url="https://www.facebook.com/dosytKR/",
                 ),
                 InlineKeyboardButton(
                     text="✈️ Telegram-канал", url="https://t.me/stoppoisonKR"
@@ -322,10 +255,50 @@ async def contacts_handler(message: types.Message):
     await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
 
 
-# --- 6. ЗАПУСК БОТА ТА ВЕБ-СЕРВЕРА ОДНОЧАСНО ---
+# 📋 Подати скаргу / звернення (Заглушка для майбутніх кнопок)
+@dp.message(F.text == "📋 Подати скаргу / звернення")
+async def complaints_handler(message: types.Message):
+    users_db.add(message.from_user.id)
+    await message.answer(
+        "📋 Розділ **«Подати скаргу / звернення»** наразі наповнюється матеріалами."
+    )
+
+
+# 📞 Довідник інстанцій (Заглушка для майбутніх кнопок)
+@dp.message(F.text == "📞 Довідник інстанцій")
+async def directory_handler(message: types.Message):
+    users_db.add(message.from_user.id)
+    await message.answer(
+        "📞 Розділ **«Довідник інстанцій»** наразі наповнюється контактами."
+    )
+
+
+# 📚 База знань
+@dp.message(F.text == "📚 База знань")
+async def kb_handler(message: types.Message):
+    users_db.add(message.from_user.id)
+    await message.answer(
+        "📚 Розділ **«База знань»** наразі наповнюється статтями."
+    )
+
+
+# 🎓 Школа зеленої демократії
+@dp.message(F.text == "🎓 Школа зеленої демократії")
+async def school_handler(message: types.Message):
+    users_db.add(message.from_user.id)
+    await message.answer(
+        "🎓 Розділ **«Школа зеленої демократії»** готує анонси нових тренінгів."
+    )
+
+
+# ==========================================
+# 🚀 ЗАПУСК СЕРВЕРУ ТА БОТА
+# ==========================================
+
+
 async def main():
     await start_web_server()  # Відкриває порт для Render
-    await dp.start_polling(bot)  # Запускає Telegram-бота
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
