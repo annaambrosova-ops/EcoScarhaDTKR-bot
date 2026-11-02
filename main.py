@@ -218,11 +218,11 @@ async def digest_handler(message: types.Message):
 async def contacts_handler(message: types.Message):
     users_db.add(message.from_user.id)
 
-text = (
-    " 🌿 **Громадська спілка «Досить труїти Кривий Ріг» (ГС ДТКР)**\n\n"
-    "Ми об'єднуємо містян, експертів та активістів задля екологічної безпеки та сталого розвитку України.\n\n"
-    "Обирайте зручний майданчик та стежте за нашими новинами, анонсами та екологічними моніторингами!"
-)
+    text = (
+        "🌿 **Громадська спілка «Досить труїти Кривий Ріг» (ГС ДТКР)**\n\n"
+        "Ми об'єднуємо містян, експертів та активістів задля екологічної безпеки та сталого розвитку України.\n"
+        "Обирайте зручний майданчик та стежте за нашими новинами, анонсами та екологічними моніторингами!"
+    )
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -237,7 +237,8 @@ text = (
                     url="https://www.instagram.com/stop_poisoning_kryvyi_rih/",
                 ),
                 InlineKeyboardButton(
-                    text="🎵 TikTok", url="https://www.tiktok.com/@stop_poisoning_kr?_t=ZM-90v9ja7KDf6&_r=1"
+                    text="🎵 TikTok",
+                    url="https://www.tiktok.com/@stop_poisoning_kr?_t=ZM-90v9ja7KDf6&_r=1",
                 ),
             ],
             [
