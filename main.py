@@ -71,10 +71,12 @@ async def log_user_to_google_form(user: types.User, button_name: str = "/start")
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(FORM_RESPONSE_URL, data=data) as resp:
-                pass
+                logging.info(f"Google Form HTTP Status: {resp.status}")
+                if resp.status != 200:
+                    body = await resp.text()
+                    logging.error(f"Google Form Response Body: {body[:200]}")
     except Exception as e:
         logging.error(f"Помилка фонового запису в Google Form: {e}")
-
 
 # ==========================================
 # ⌨️ КЛАВІАТУРИ
