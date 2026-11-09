@@ -118,7 +118,7 @@ async def handle_healthcheck(request):
 
 async def start_web_server():
     app = web.Application()
-    app.router.add_get("/", handle_handle_healthcheck)
+    app.router.add_get("/", handle_healthcheck)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 10000))
