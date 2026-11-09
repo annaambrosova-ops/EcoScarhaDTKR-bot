@@ -20,7 +20,7 @@ from aiohttp import web
 # ==========================================
 
 BOT_TOKEN = os.environ.get(
-    "BOT_TOKEN", "8949974589:AAEF_mtYAqsgHhOTFFswyLET2FkDycSGG88"
+    "BOT_TOKEN", "8949974589:AAFD_gSHXF-1OrPbDFrWO7kMjuDXjf04ERc"
 )
 ADMIN_ID = 1218438551
 
