@@ -19,7 +19,9 @@ from aiohttp import web
 # 🔑 НАЛАШТУВАННЯ ТА НАЛАШТОВУВАНІ ЗМІННІ
 # ==========================================
 
-BOT_TOKEN = "8949974589:AAEF_mtYAqsgHhOTFFswyLET2FkDycSGG88"
+BOT_TOKEN = os.environ.get(
+    "BOT_TOKEN", "8949974589:AAEF_mtYAqsgHhOTFFswyLET2FkDycSGG88"
+)
 ADMIN_ID = 1218438551
 
 # 🔗 Публічне CSV-посилання на Google Таблицю Дайджесту
@@ -78,6 +80,7 @@ async def log_user_to_google_form(user: types.User, button_name: str = "/start")
     except Exception as e:
         logging.error(f"Помилка фонового запису в Google Form: {e}")
 
+
 # ==========================================
 # ⌨️ КЛАВІАТУРИ
 # ==========================================
@@ -115,7 +118,7 @@ async def handle_healthcheck(request):
 
 async def start_web_server():
     app = web.Application()
-    app.router.add_get("/", handle_healthcheck)
+    app.router.add_get("/", handle_handle_healthcheck)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 10000))
@@ -264,9 +267,15 @@ async def digest_handler(message: types.Message):
                 text_lines.append(f"• **Слухання:** {hearings}")
             if deadline:
                 text_lines.append(f"• **Дедлайн зауважень:** {deadline}")
-            if link and link.startswith("http"):
+
+            # 🛡 СУВОРА ФІЛЬТРАЦІЯ ПОСИЛАНЬ (Блокуємо чужі t.me та рекламу)
+            if link and link.startswith("http") and "t.me" not in link:
                 text_lines.append(f"🌐 [Переглянути у Реєстрі]({link})")
-            if hearings_link and hearings_link.startswith("http"):
+            if (
+                hearings_link
+                and hearings_link.startswith("http")
+                and "t.me" not in hearings_link
+            ):
                 text_lines.append(
                     f"🎧 [Долучитися / Інфо про слухання]({hearings_link})"
                 )
